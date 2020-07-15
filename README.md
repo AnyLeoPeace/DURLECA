@@ -1,13 +1,14 @@
 # DURLECA
 Here is the released code for the DUal-objective Reinforcement-Learning Epidemic Control Agent (DURLECA) presented in our KDD paper *Reinforced Epidemic Control: Saving Both Lives and Economy*.
 
-- [ ] Provide a sample code for generating an synthetic OD dataset.
+## TODO
+- [ ] Provide a sample code for generating a synthetic OD dataset.
 
 
 ## Generate a synthetic OD dataset
-Please note that, we would not provide the real-world Beijing dataset due to privacy and ethic concerns. Thus, we suggest users to generate a synthetic OD dataset or use any other dataset from their own resources.
+Please note that we would not provide the real-world Beijing dataset due to privacy and ethical concerns. Thus, we suggest users generate a synthetic OD dataset or use any other dataset from their own resources.
 
-Please change the dataset path in utils.py file.
+Please change the dataset path in the utils.py file.
 
 ## Train
 ```
@@ -21,7 +22,7 @@ Please change the dataset path in utils.py file.
     --beta_s 0.1 --beta_m 3 --gamma 0.3 --theta 0.3 \
 
 ```
-Users could also adjust parameters by their own to simulate different diseases or to have different objectives.
+Users could also adjust parameters on their own to simulate different diseases or to have different objectives.
 
 ## Test
 ```
