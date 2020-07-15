@@ -20,7 +20,6 @@ Please change the dataset path in the utils.py file.
     --mobility_decay 0.99 --km 72 --H0 3\
     --I_threshold 100 --lockdown_threshold 336 \
     --beta_s 0.1 --beta_m 3 --gamma 0.3 --theta 0.3 \
-
 ```
 Users could also adjust parameters on their own to simulate different diseases or to have different objectives.
 
