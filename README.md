@@ -1,7 +1,7 @@
 # DURLECA
 Here is the released code for the DUal-objective Reinforcement-Learning Epidemic Control Agent (DURLECA) presented in our KDD paper *Reinforced Epidemic Control: Saving Both Lives and Economy*.
 
-- [] Provide a sample code for generating an synthetic OD dataset.
+- [ ] Provide a sample code for generating an synthetic OD dataset.
 
 
 ## Generate a synthetic OD dataset
