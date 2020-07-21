@@ -21,7 +21,7 @@ class COVID_Env(gym.Env):
      
     def __init__(self, population, OD, reward_func, betas_m, betas_s, gammas, thetas, C_reward_func, D_reward_func = None,
                 fixed_no_policy_days = 0, fixed_no_policy_i = 0, mobility_decay = 0, I_threshold = 100, lockdown_threshold = -1,
-                period = 24, total_time=744, N = 323, simulation_round = False, expert_dif = None, reward_clip = [0,100],
+                period = 24, total_time=744, simulation_round = False, expert_dif = None, reward_clip = [0,100],
                 state_import_p = 0, state_import_noise = 0, state_obs_p = 0, state_obs_noise = 0, state_obs_round = False,
                 od_misopt_p = 0, od_misopt_noise = 0, od_obs_p = 0, od_obs_noise = 0,
                 shuffle_OD = False, seed = 0):
@@ -38,9 +38,9 @@ class COVID_Env(gym.Env):
         self.accumulated_time = 0
         self.time_step = 0
         self.total_time = total_time
-        self.N = N
+        self.nb_regions = OD.shape[-1]
         self.OD = OD
-        self.action_space = spaces.Box(low=0,high=1, shape=(N,N))
+        self.action_space = spaces.Box(low=0,high=1, shape=(self.nb_regions,self.nb_regions))
         self.period = period
         self.reward_func = reward_func
         self.I_threshold = I_threshold # Condition for done (the threshold for the number of infections)
@@ -53,7 +53,7 @@ class COVID_Env(gym.Env):
         self.mobility_decay = mobility_decay # Used to calculate accumalted mobility score
         self.reward_clip = reward_clip # Do we clip the reward
 
-        self.init_ac_m = np.zeros(shape=(N,)) # Initialize the accumulated mobility loss in the first day.
+        self.init_ac_m = np.zeros(shape=(self.nb_regions,)) # Initialize the accumulated mobility loss in the first day.
         self.OD_mean_out = self.OD.mean(0).sum(-1) 
         
         print('Mobility decay',mobility_decay)
@@ -82,7 +82,7 @@ class COVID_Env(gym.Env):
         self.state_obs_round = state_obs_round
         self.noises = [self.od_obs_p, self.od_obs_noise, self.od_misopt_p, self.od_misopt_noise, self.state_import_p, self.state_import_noise, self.state_obs_p, self.state_obs_noise, self.state_obs_round]
         
-        np.random.seed(seed)
+        # np.random.seed(seed)
         pass
 
     def set_no_noise(self):
@@ -127,8 +127,8 @@ class COVID_Env(gym.Env):
         # OD obs noise. We have move this to main.py
         # if self.od_obs_p > 0 and self.od_obs_noise > 0:
         #     print('Use od obs noise')
-        #     od_obs_flag = np.bitwise_and(np.random.rand(self.period,323,323) < self.od_obs_p, OD_d > 0) 
-        #     OD_d_n = np.int32(OD_d * od_obs_flag * np.random.randn(self.period,323,323) * self.od_obs_noise)
+        #     od_obs_flag = np.bitwise_and(np.random.rand(self.period,self.nb_regions,self.nb_regions) < self.od_obs_p, OD_d > 0) 
+        #     OD_d_n = np.int32(OD_d * od_obs_flag * np.random.randn(self.period,self.nb_regions,self.nb_regions) * self.od_obs_noise)
         #     OD_d = np.int32(OD_d) + OD_d_n
         #     OD_d[OD_d<0] = 0 
 
@@ -138,20 +138,20 @@ class COVID_Env(gym.Env):
             OD_time = OD_d * action
         elif action.shape[-1] == 104329:
             # edge mode
-            action = action.reshape((323, 323))
+            action = action.reshape((self.nb_regions, self.nb_regions))
             OD_time = OD_d * action[np.newaxis,:]
         elif len(action) == 1 and action.shape[-1] == 1:
             # graph mode
             OD_time = OD_d * action[0]
-        elif action.shape[-1] == 323:
+        elif action.shape[-1] == self.nb_regions:
             # node mode
-            action = action.reshape(323, 1)
+            action = action.reshape(self.nb_regions, 1)
             OD_time = OD_d * action[np.newaxis,:]
         
         # OD misopt noise
         if self.od_misopt_p > 0 and self.od_misopt_noise > 0:
-            od_misopt_flag = np.random.rand(self.period,323,323) < self.od_misopt_p # 注意我这里要求只有OD >= 0都可以
-            OD_time += OD_d * od_misopt_flag * np.random.randn(self.period,323,323) * self.od_misopt_noise # 注意这里是误报百分比
+            od_misopt_flag = np.random.rand(self.period,self.nb_regions,self.nb_regions) < self.od_misopt_p # 注意我这里要求只有OD >= 0都可以
+            OD_time += OD_d * od_misopt_flag * np.random.randn(self.period,self.nb_regions,self.nb_regions) * self.od_misopt_noise # 注意这里是误报百分比
             OD_time[OD_time<0] = 0
    
         self.OD_ratio = OD_time.sum() / OD_d.sum()
@@ -163,7 +163,7 @@ class COVID_Env(gym.Env):
         # Exp Dif (Not used)
         reward_expert = None
         if self.expert_dif is not None and compute_expert_reward == True:
-            action_expert = self.expert_dif([self.state]).reshape(323,323)
+            action_expert = self.expert_dif([self.state]).reshape(self.nb_regions,self.nb_regions)
             OD_expert = OD_d * action_expert[np.newaxis,:]
             SIRH_expert = self.period_model.predict([SIRH[np.newaxis,:], OD_expert[np.newaxis,:]])[0]
             accumulated_m_expert = self.mobility_decay * accumulated_m + (OD_d - OD_expert).sum(axis = (0,2))[:,np.newaxis]
@@ -192,13 +192,13 @@ class COVID_Env(gym.Env):
             if self.shuffle_OD == True:
                 random_id = np.arange(31)
                 np.random.shuffle(random_id)
-                self.OD = self.OD.reshape(31,24,323,323)[random_id].reshape(744,323,323)
+                self.OD = self.OD.reshape(31,24,self.nb_regions,self.nb_regions)[random_id].reshape(744,self.nb_regions,self.nb_regions)
 
 
         # Import Noise, i.e., the noise of simulation (due to the wrong estimation of disease parameters)
         if self.state_import_noise > 0 and self.state_import_p > 0 :
-            import_noise_flag = np.random.rand(323,4) < self.state_import_p
-            SIRH_ += SIRH_ * import_noise_flag * np.random.randn(323,4) * self.state_import_noise 
+            import_noise_flag = np.random.rand(self.nb_regions,4) < self.state_import_p
+            SIRH_ += SIRH_ * import_noise_flag * np.random.randn(self.nb_regions,4) * self.state_import_noise 
             SIRH_[SIRH_<0] = 0
 
         # Next True State
@@ -211,8 +211,8 @@ class COVID_Env(gym.Env):
         # Next Observable state
         SIRH_obs_ = np.copy(SIRH_)
         if self.state_obs_noise > 0 and self.state_obs_p > 0 :
-            obs_noise_flag = np.random.rand(323, 4) < self.state_obs_p
-            SIRH_obs_ += SIRH_obs_ * obs_noise_flag * np.random.randn(323, 4) * self.state_obs_noise # 注意这里是误报百分比
+            obs_noise_flag = np.random.rand(self.nb_regions, 4) < self.state_obs_p
+            SIRH_obs_ += SIRH_obs_ * obs_noise_flag * np.random.randn(self.nb_regions, 4) * self.state_obs_noise # 注意这里是误报百分比
             SIRH_obs_[SIRH_obs_<0] = 0
 
         if self.state_obs_round == True:
@@ -269,26 +269,26 @@ class COVID_Env(gym.Env):
         
         # Initialize infections
         if location_id is None:
-            location_id = np.random.randint(low=0, high = self.N)
+            location_id = np.random.randint(low=0, high = self.nb_regions)
             while self.population[location_id] == 0:
-                location_id = np.random.randint(low=0, high = self.N)
+                location_id = np.random.randint(low=0, high = self.nb_regions)
             
         if infected_people is None:
             infected_people = np.random.randint(low = 10, high = 20)
             infected_people = min(infected_people, self.population[location_id])
 
-        SIRH = np.zeros((self.N,4), np.uint16)
+        SIRH = np.zeros((self.nb_regions,4), np.uint16)
         SIRH[:,0] = self.population
 
         SIRH[location_id, 0] -= infected_people
         SIRH[location_id, 1] += infected_people
 
-        SIRH_v = np.zeros((self.N,4), np.uint16)
+        SIRH_v = np.zeros((self.nb_regions,4), np.uint16)
         SIRH_v[:,0] = SIRH[:,0]+SIRH[:,1]
 
         self.time_step = 0
         self.accumulated_time = 0
-        time = np.zeros((self.N,1))
+        time = np.zeros((self.nb_regions,1))
         time[:self.period,0] = np.arange(self.period)
 
         accumulated_m = self.init_ac_m

@@ -37,7 +37,7 @@ def mean_q(y_true, y_pred):
 # http://arxiv.org/pdf/1509.02971v2.pdf
 # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.646.4324&rep=rep1&type=pdf
 class DDPGAgent(Agent):
-    def __init__(self, nb_actions, build_func, memory, start_step = 0,
+    def __init__(self, nb_actions, build_func, memory, start_step = 0, nb_regions = 323,
                  gamma=.99, batch_size=32, nb_steps_warmup_critic=1000, nb_steps_warmup_actor=1000, 
                  train_interval=1, memory_interval=1, delta_range=None, delta_clip=np.inf,
                  random_process=None, custom_model_objects={}, target_model_update=.001, 
@@ -69,6 +69,7 @@ class DDPGAgent(Agent):
         self.nb_steps_warmup_critic = nb_steps_warmup_critic + start_step
         self.exp_policy = exp_policy # Smart policy func used to imitate
         self.get_prob_imitation = get_prob_imitation
+        self.nb_regions = nb_regions
 
         # noise
         self.param_noise = param_noise
@@ -186,14 +187,14 @@ class DDPGAgent(Agent):
             self.perturbed_actor = build_actor()
             actor_input = self.actor.input
             OD_input = self.actor.layers[2].output
-            OD_sum = Lambda(lambda x: tf.reshape(tf.cast(K.sum(x, axis = 1), tf.bool), (-1, 323*323)))(OD_input)
+            OD_sum = Lambda(lambda x: tf.reshape(tf.cast(K.sum(x, axis = 1), tf.bool), (-1, self.nb_regions*self.nb_regions)))(OD_input)
             perturbed_actor_output = self.perturbed_actor(actor_input)
-            if self.nb_actions == 323 * 323:
+            if self.nb_actions == self.nb_regions * self.nb_regions:
                 distance_func = lambda inputs: tf.sqrt(tf.reduce_sum(tf.math.divide_no_nan(
                         tf.square(inputs[0] - inputs[1]), self.delta + tf.reduce_sum(tf.cast(inputs[2], tf.float32))
                         )))
                 distance = Lambda(distance_func)([self.actor.output, perturbed_actor_output, OD_sum])
-            elif self.nb_actions == 1 or self.nb_actions == 323:
+            elif self.nb_actions == 1 or self.nb_actions == self.nb_regions:
                 distance =  Lambda(lambda inputs: tf.sqrt(tf.reduce_mean(tf.square(inputs[0] - inputs[1]))))([self.actor.output, perturbed_actor_output])
 
             print('-'*20,'Build Perturbed Actor and Distance Measure','-'*20)
@@ -466,7 +467,7 @@ class DDPGAgent(Agent):
                     _ = self.perturbed_actor_train_fn(inputs)[0]
 
                 if np.isnan(action_values).any():
-                    action_values = action_values.reshape(-1, 323, 323)
+                    action_values = action_values.reshape(-1, self.nb_regions, self.nb_regions)
                     pos_x, pos_y, pos_z = np.where(np.isnan(action_values))
                     l = len(pos_x)
                     print('Nan in train')

@@ -18,19 +18,6 @@ from exp_policy import get_exp_policy
 import numpy as np
 from param_noise import AdaptiveParamNoiseSpec
 
-N = 323
-
-def get_nb_actions(action_mode):
-    if action_mode == 'edge':
-        nb_actions = N * N
-    elif action_mode == 'node':
-        nb_actions = N
-    elif action_mode == 'graph':
-        nb_actions = 1
-    else:
-        print('Wrong action mode')
-        exit()
-    return nb_actions
 
 '''Build Model'''
 def cross_concate(inputs):
@@ -59,15 +46,29 @@ def get_sample_weight_func(args):
     else:
         return None
 
+def get_nb_actions(action_mode, nb_regions):
+    if action_mode == 'edge':
+        nb_actions = nb_regions * nb_regions
+    elif action_mode == 'node':
+        nb_actions = nb_regions
+    elif action_mode == 'graph':
+        nb_actions = 1
+    else:
+        print('Wrong action mode')
+        exit()
+    return nb_actions
 
 def get_build_func(OD_tensor, args):
     dim = args.dim
     delta = tf.constant(1e-7, dtype = tf.float32)
 
-    nb_actions = get_nb_actions(args.action_mode)
+    nb_regions = K.int_shape(OD_tensor)[-1]
+    nb_actions = get_nb_actions(args.action_mode, nb_regions)
     mobility_decay = tf.constant(args.mobility_decay, dtype=tf.float32)
-    OD_mean = Lambda(lambda x: tf.reduce_mean(x, axis=0, keepdims = True))(OD_tensor) # 1 * 323 * 323
-    OD_mean_out = Lambda(lambda x: tf.reduce_mean(x, axis=-1))(OD_mean) # 1 * 323
+    OD_mean = Lambda(lambda x: tf.reduce_mean(x, axis=0, keepdims = True))(OD_tensor) # 1 * 323 * nb_regions
+    OD_mean_out = Lambda(lambda x: tf.reduce_mean(x, axis=-1))(OD_mean) # 1 * nb_regions
+
+
 
     def get_accumulated_cost(inputs):
         OD, OD_, accumlated = inputs
@@ -99,7 +100,7 @@ def get_build_func(OD_tensor, args):
 
 
     def build():
-        state_input = Input(shape=(N, 11), name = 'state_input') 
+        state_input = Input(shape=(nb_regions, 11), name = 'state_input') 
         control_index = np.arange(0, args.period).reshape(4,-1)        
 
         def build_actor():
@@ -108,8 +109,8 @@ def get_build_func(OD_tensor, args):
             time_input = Lambda(lambda x: x[:,:args.period,8])(state_input) # None * period
             OD_input = Lambda(lambda x: tf.gather(OD_tensor, tf.cast(x,tf.int32), axis=0))(time_input)
 
-            ac_m_input = Lambda(lambda x: K.expand_dims(K.repeat(x[:,:,9], N), axis = -1))(state_input) # N * N * 1
-            ac_d_input = Lambda(lambda x: K.expand_dims(K.repeat(x[:,:,10], N), axis = -1))(state_input) # N * N * 1
+            ac_m_input = Lambda(lambda x: K.expand_dims(K.repeat(x[:,:,9], nb_regions), axis = -1))(state_input) # nb_regions * nb_regions * 1
+            ac_d_input = Lambda(lambda x: K.expand_dims(K.repeat(x[:,:,10], nb_regions), axis = -1))(state_input) # nb_regions * nb_regions * 1
             features_input = get_feature_input()(state_input)
 
             features = GNN_layer(16, aggregate_op = aggregate_op, BN = BatchNormalization(), activation='relu', kernel_regularizer=l2(5e-4), index = control_index[0])([features_input, OD_input])
@@ -120,38 +121,38 @@ def get_build_func(OD_tensor, args):
             print('Action mode',args.action_mode)
 
             if args.action_mode == 'edge':
-                OD_sum = Lambda(lambda x: K.sum(x,1))(OD_input) # N*N
-                features = Lambda(cross_concate)([features, features]) # N*N, 2*dim
-                OD_ = Permute((2,3,1))(OD_input) # N*N*4
+                OD_sum = Lambda(lambda x: K.sum(x,1))(OD_input) # nb_regions*nb_regions
+                features = Lambda(cross_concate)([features, features]) # nb_regions*nb_regions, 2*dim
+                OD_ = Permute((2,3,1))(OD_input) # nb_regions*nb_regions*4
 
                 if args.layer_type == 'weights':
-                    features = Reshape((N, N, dim*2+2))(features)
+                    features = Reshape((nb_regions, nb_regions, dim*2+2))(features)
                 else:
-                    features = Reshape((N, N, dim*2))(features)
+                    features = Reshape((nb_regions, nb_regions, dim*2))(features)
 
                 features = Lambda(lambda inputs: tf.concat((inputs[0], inputs[1], inputs[2], inputs[3]), -1))([ac_m_input, ac_d_input, OD_, features])
                 features = Dense(dim, activation = 'relu')(features)
-                features = BatchNormalization()(features) # None * N * N * dim
+                features = BatchNormalization()(features) # None * nb_regions * nb_regions * dim
                 actions_ = Dense(1, activation='sigmoid')(features)
-                actions_ = Reshape((N,N))(actions_)
+                actions_ = Reshape((nb_regions,nb_regions))(actions_)
                 actions = Lambda(lambda x:  tf.where(tf.not_equal(x[1], 0), 
                                                     x[0], 
                                                     tf.ones_like(x[0]))
                                                     )([actions_, OD_sum])
-                actions = Reshape((N*N,))(actions)
+                actions = Reshape((nb_regions*nb_regions,))(actions)
 
             elif args.action_mode == 'node':
-                # N actions
-                OD_sum = Lambda(lambda x: tf.reduce_sum(x,axis=[1,-1]))(OD_input) # N*N
+                # nb_regions actions
+                OD_sum = Lambda(lambda x: tf.reduce_sum(x,axis=[1,-1]))(OD_input) # nb_regions*nb_regions
                 features = Lambda(lambda inputs: tf.concat((inputs[0][:,0], inputs[1][:,0], tf.expand_dims(inputs[2], -1), inputs[3]), -1))([ac_m_input, ac_d_input, OD_sum, features])
                 features = Dense(dim, activation = 'relu')(features)
                 features = BatchNormalization()(features)
                 actions = Dense(1, activation='sigmoid')(features)
-                actions = Reshape((N,))(actions)
+                actions = Reshape((nb_regions,))(actions)
 
             elif args.action_mode == 'graph':
                 # 1 action
-                OD_sum = Lambda(lambda x: tf.reduce_sum(x,axis=[1,-1]))(OD_input) # N*N
+                OD_sum = Lambda(lambda x: tf.reduce_sum(x,axis=[1,-1]))(OD_input) # nb_regions*nb_regions
                 features = Lambda(lambda inputs: tf.concat((inputs[0][:,0], inputs[1][:,0], tf.expand_dims(inputs[2], -1), inputs[3]), -1))([ac_m_input, ac_d_input, OD_sum, features])
                 features = Flatten()(features)
                 features = Dense(dim*8, activation = 'relu')(features)
@@ -179,10 +180,10 @@ def get_build_func(OD_tensor, args):
             
             print('Action mode',args.action_mode)
             if args.action_mode == 'edge':
-                # N*N actions
-                action_ = Reshape((N, N))(action_input)
+                # nb_regions*nb_regions actions
+                action_ = Reshape((nb_regions, nb_regions))(action_input)
             elif args.action_mode == 'node':
-                # N actions
+                # nb_regions actions
                 action_ = Lambda(lambda x: tf.expand_dims(x,-1))(action_input)
             elif args.action_mode == 'graph':
                 # one action
@@ -228,7 +229,7 @@ def get_build_func(OD_tensor, args):
 
             elif args.pool_type == 'weight_dense':
                 print('Graph Pool Type: WeightDenseSum')
-                OD_mean_out_ = Lambda(lambda x: tf.gather(OD_mean_out, tf.cast(x[:,args.period,8],tf.int32), axis=0))(state_input) # None * N 
+                OD_mean_out_ = Lambda(lambda x: tf.gather(OD_mean_out, tf.cast(x[:,args.period,8],tf.int32), axis=0))(state_input) # None * nb_regions 
                 features = Lambda(lambda x: tf.concat((tf.expand_dims(x[0],-1),tf.expand_dims(x[1],-1),tf.expand_dims(x[2],-1),x[3]), axis=-1))([ac_ratio, current_ratio, ac_d, features])
                 features = Dense(dim, activation = 'relu')(features)
                 features = BatchNormalization()(features)
@@ -255,7 +256,8 @@ def get_build_func(OD_tensor, args):
 def build_agent(OD, OD_tensor, args):
     '''Build model'''
     build_func = get_build_func(OD_tensor, args)
-    nb_actions = get_nb_actions(args.action_mode)
+    nb_regions = OD.shape[-1]
+    nb_actions = get_nb_actions(args.action_mode, nb_regions)
 
     def get_prob_imitation(steps):
         if steps < args.prob_imitation_steps:
@@ -290,7 +292,8 @@ def build_agent(OD, OD_tensor, args):
         param_noise = None
     
 
-    agent = DDPGAgent(nb_actions=nb_actions, build_func=build_func, start_step=args.start_step,
+    agent = DDPGAgent(nb_actions=nb_actions, build_func=build_func, nb_regions=nb_regions,
+                    start_step=args.start_step,
                     memory=memory, nb_steps_warmup_critic=args.warmup_steps, nb_steps_warmup_actor=args.warmup_steps, 
                     exp_policy = get_exp_policy(OD, args),
                     batch_size = args.batch_size, param_noise = param_noise, get_prob_imitation = get_prob_imitation,

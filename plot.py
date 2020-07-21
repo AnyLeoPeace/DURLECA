@@ -4,8 +4,6 @@ import pickle
 import numpy as np
 import os
 
-N = 323
-
 def plot_results(path, counts, ODs, ODs_daily, name = None):
     # Plot OD and infections
     f = plt.figure(figsize = (15,10))
@@ -22,13 +20,13 @@ def plot_results(path, counts, ODs, ODs_daily, name = None):
     plt.xlabel('Time steps')
     # 
     plt.subplot(2,2,3)
-    plt.plot(range(len(counts)), counts[:, 1] / N, label= 'RL')
+    plt.plot(range(len(counts)), counts[:, 1], label= 'RL')
     plt.legend(loc='upper right')
     plt.ylabel('Infection')
     plt.xlabel('Time steps')
     # 
     plt.subplot(2,2,4)
-    plt.plot(range(len(counts)), counts[:, 3] / N, label= 'RL')
+    plt.plot(range(len(counts)), counts[:, 3], label= 'RL')
     plt.legend(loc='upper right')
     plt.ylabel('Hospitalized')
     plt.xlabel('Time steps')

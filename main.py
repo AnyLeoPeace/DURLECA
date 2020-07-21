@@ -12,6 +12,7 @@ import numpy as np
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 import tensorflow as tf
+np.random.seed(args.seed)
 random.seed(args.seed)
 tf.random.set_seed(args.seed)
 
@@ -35,9 +36,6 @@ from plot import *
 
 
 localtime = time.strftime("%m%d_%H:%M:%S", time.localtime()) 
-
-N = 323
-
 
 # Episode end (succeed) reward
 def C_func(remain_steps):
@@ -81,11 +79,12 @@ def get_max_start_func(args):
 
 def get_OD_tensor(OD, args):
     OD_d = np.copy(OD)
+    a,b,c = OD.shape
     if args.od_obs_p > 0 and args.od_obs_noise > 0:
         print('Use od obs noise')
-        np.random.seed(0)
-        od_obs_flag = np.bitwise_and(np.random.rand(744,323,323) < args.od_obs_p, OD_d > 0) 
-        OD_d_n = np.int32(OD_d * od_obs_flag * np.random.randn(744,323,323) * args.od_obs_noise)
+        # np.random.seed(args.seed)
+        od_obs_flag = np.bitwise_and(np.random.rand(a,b,c) < args.od_obs_p, OD_d > 0) 
+        OD_d_n = np.int32(OD_d * od_obs_flag * np.random.randn(a,b,c) * args.od_obs_noise)
         OD_d = np.int32(OD_d) + OD_d_n
         OD_d[OD_d<0] = 0 
     
@@ -93,16 +92,18 @@ def get_OD_tensor(OD, args):
     
 
 def train(args):
-    betas_s = np.ones(N) * (args.beta_s / 24) 
-    betas_m = np.ones(N) * (args.beta_m / 24) 
-    gammas = np.ones(N) * (args.gamma / 24)  
-    thetas = np.ones(N) * (args.theta / 24) 
-
     '''Set env'''
     OD, population = load_data()
     if args.OD_delay > 0:
         print('OD delay',args.OD_delay)
         OD = np.vstack([OD[args.OD_delay:],OD[:args.OD_delay]])
+
+    nb_regions = OD.shape[-1]
+
+    betas_s = np.ones(nb_regions) * (args.beta_s / 24) 
+    betas_m = np.ones(nb_regions) * (args.beta_m / 24) 
+    gammas = np.ones(nb_regions) * (args.gamma / 24)  
+    thetas = np.ones(nb_regions) * (args.theta / 24) 
 
     reward_func_dict = get_reward_func_dict(args)
     expert_dif = get_exp_policy(OD, args) if args.expert_dif == True else None
@@ -117,7 +118,7 @@ def train(args):
             od_obs_p = args.od_obs_p, od_obs_noise = args.od_obs_noise, od_misopt_p = args.od_misopt_p, od_misopt_noise = args.od_misopt_noise, \
             shuffle_OD = args.shuffle_OD)
     
-    if args.train_noise == True:
+    if args.train_noise == False:
         env.set_no_noise()
 
     '''Build model'''
@@ -164,16 +165,19 @@ def train(args):
 
 
 def test_list(args):
-    betas_s = np.ones(N) * (args.beta_s / 24) 
-    betas_m = np.ones(N) * (args.beta_m / 24) 
-    gammas = np.ones(N) * (args.gamma / 24)  
-    thetas = np.ones(N) * (args.theta / 24) 
-
     '''Set env'''
     OD, population = load_data()
+
     if args.OD_delay > 0:
         print('OD delay',args.OD_delay)
         OD = np.vstack([OD[args.OD_delay:],OD[:args.OD_delay]])
+    
+    nb_regions = OD.shape[-1]
+    
+    betas_s = np.ones(nb_regions) * (args.beta_s / 24) 
+    betas_m = np.ones(nb_regions) * (args.beta_m / 24) 
+    gammas = np.ones(nb_regions) * (args.gamma / 24)  
+    thetas = np.ones(nb_regions) * (args.theta / 24) 
 
     reward_func_dict = get_reward_func_dict(args)
     expert_dif = get_exp_policy(OD, args) if args.expert_dif == True else None
@@ -211,7 +215,7 @@ def test_list(args):
             test(env, OD, select_action, path, args)
     
     elif args.p >= 0:
-        ones = np.ones((N*N,))
+        ones = np.ones((nb_regions*nb_regions,))
         print('Use fixed policy',args.p)
         select_action = lambda x: ones * args.p
         path = 'save/fixed_' + str(args.p) + '/'
@@ -236,6 +240,7 @@ def test(env, OD, select_action, path, args):
     env.I_threshold = 1000
     env.lockdown_threshold = -1
     no_policy_flag = True
+    nb_regions = OD.shape[-1]
 
     for no_days in args.fixed_no_policy_days_list:
         env.fixed_no_policy_days = 0
@@ -251,9 +256,9 @@ def test(env, OD, select_action, path, args):
         actions_ = []
         
         if args.action_mode == 'edge':
-            p = np.ones((N*N,))
+            p = np.ones((nb_regions*nb_regions,))
         elif args.action_mode == 'node':
-            p = np.ones((N,))
+            p = np.ones((nb_regions,))
         else:
             p = 1
         states = [state[:,:4]]
@@ -300,11 +305,11 @@ def test(env, OD, select_action, path, args):
         
             OD_sum = OD[i:i+args.period].sum(0)
             if args.action_mode == 'edge':
-                action = action.reshape((N,N))
-                # action_ = action_.reshape((N,N))
+                action = action.reshape((nb_regions,nb_regions))
+                # action_ = action_.reshape((nb_regions,nb_regions))
             elif args.action_mode == 'node':
-                action = action.reshape((N,1))
-                # action_ = action_.reshape((N,1))
+                action = action.reshape((nb_regions,1))
+                # action_ = action_.reshape((nb_regions,1))
 
             OD_p = OD_sum * action
             # OD_p_ = OD_sum * action_
@@ -312,8 +317,8 @@ def test(env, OD, select_action, path, args):
             ODs_origin.append(OD_sum)
         
             if args.verbose == True:
-                print('Period',len(counts), 'SIR', count / N,'; M', OD_p.mean()/OD_sum.mean())
-                # print('Period',len(counts), 'SIR', count / N,'; M', OD_p.mean()/OD_sum.mean(), 'Right M', OD_p_.mean()/OD_sum.mean())
+                print('Period',len(counts), 'SIR', count / nb_regions,'; M', OD_p.mean()/OD_sum.mean())
+                # print('Period',len(counts), 'SIR', count / nb_regions,'; M', OD_p.mean()/OD_sum.mean(), 'Right M', OD_p_.mean()/OD_sum.mean())
                 print('Reward',r)
                 print('-'*30)
             
@@ -328,8 +333,8 @@ def test(env, OD, select_action, path, args):
 
         len_d = 24 // args.period
         days = len(ODs) // len_d
-        ODs_daily = ODs[:days*len_d].reshape(-1, len_d, 323, 323).sum(1)
-        ODs_origin_daily = ODs_origin[:days*len_d].reshape(-1, len_d, 323, 323).sum(1)
+        ODs_daily = ODs[:days*len_d].reshape(-1, len_d, nb_regions, nb_regions).sum(1)
+        ODs_origin_daily = ODs_origin[:days*len_d].reshape(-1, len_d, nb_regions, nb_regions).sum(1)
 
         results = {}
         results['start_intervene'] = no_days
@@ -373,6 +378,8 @@ def test(env, OD, select_action, path, args):
 
 def get_metrics(results, ODs, ODs_origin, ODs_daily, ODs_origin_daily):
     # mean/max h
+    nb_regions = ODs.shape[-1]
+
     results['mean_h'] = np.mean(results['SIRH'][:,-1]) 
     results['max_h'] = np.max(results['SIRH'][:,-1])
     results['total_r'] = results['SIRH'][-1,-2]
@@ -395,7 +402,7 @@ def get_metrics(results, ODs, ODs_origin, ODs_daily, ODs_origin_daily):
     results['strict_region_lockdown_duration'] = np.sum(results['strict_region_daily_ratio'] < 0.2)
     results['strict_region_total_ratio'] = region_ratio[strict_region_id]
 
-    plot_results(results['path'], results['SIRH'], results['city_period_ratio'], results['city_daily_ratio'], name = str(results['start_intervene']))
+    plot_results(results['path'], results['SIRH'] / nb_regions, results['city_period_ratio'], results['city_daily_ratio'], name = str(results['start_intervene']))
 
     return results
 

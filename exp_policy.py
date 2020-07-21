@@ -2,13 +2,14 @@
 from utils import get_connected
 import numpy as np
 
-N = 323
 '''Fixed smart policy'''
 def get_exp_policy(OD, args, policy_id = None):
+    nb_regions = OD.shape[-1]
+
     if args.action_mode == 'edge':
-        ones = np.ones((N,N)) 
+        ones = np.ones((nb_regions,nb_regions)) 
     elif args.action_mode == 'node':
-        ones = np.ones(N) 
+        ones = np.ones(nb_regions) 
     elif args.action_mode == 'graph':
         ones = 1
     else:
@@ -21,7 +22,7 @@ def get_exp_policy(OD, args, policy_id = None):
     period = args.period
     expert_h = args.expert_h
     expert_lockdown = args.expert_lockdown
-    his_quotas = np.zeros(N, dtype=np.uint8) 
+    his_quotas = np.zeros(nb_regions, dtype=np.uint8) 
     expert_k =  args.expert_k
     expert_p = args.expert_p
 

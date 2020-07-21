@@ -284,6 +284,7 @@ class GraphSageConvOD(Layer):
         loc_feature = input_feature
         populations = loc_feature[:,:,:1]  # The first dimension is for saving regional population. Size: None * N * 1
         SIR = loc_feature[:,:,1:] # None * N * d-1
+        nb_regions = K.int_shape(OD_all)[-1]
         for index in self.index:
             OD = OD_all[:,index]
             SIR_n = tf.math.divide_no_nan(SIR, self.delta + populations) # None * N * d-1
@@ -291,7 +292,7 @@ class GraphSageConvOD(Layer):
             # As the regional population is affected by previous mobility restrictions, the current move-out population may be more than the total population in very few cases.
             # Here we force the move-out population <= the total population
             ratio = tf.math.divide_no_nan(populations, self.delta + tf.reduce_sum(OD, axis=2, keepdims = True))
-            ratio = tf.repeat(ratio, 323, axis=-1)
+            ratio = tf.repeat(ratio, nb_regions, axis=-1)
             OD = tf.where(ratio < 1, OD*ratio, OD)
             OD_out = tf.reduce_sum(OD, axis=2, keepdims=True)
             OD_in = tf.reduce_sum(OD, axis=1, keepdims=False)

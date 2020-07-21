@@ -77,8 +77,8 @@ parser.add_argument("--lockdown_threshold", type=float, help='lockdown_threshold
 parser.add_argument("--D_reward", type=str2bool, help='D_reward',default='True')
 parser.add_argument("--C_reward", type=str2bool, help='C_reward',default='True')
 
-parser.add_argument("--beta_m", type=float, help='moving infection rate',default=3) # 1.2
-parser.add_argument("--beta_s", type=float, help='staying infection rate',default=0.1) # 0.4
+parser.add_argument("--beta_m", type=float, help='moving infection rate',default=3) # 3
+parser.add_argument("--beta_s", type=float, help='staying infection rate',default=0.1) # 0.1
 parser.add_argument("--gamma", type=float, help='hospitalization rate',default=0.3) # 0.3
 parser.add_argument("--theta", type=float, help='recover rate',default=0.3) # 0.3
 
