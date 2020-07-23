@@ -51,7 +51,7 @@ parser.add_argument("--NN_penal", type=float, help='NN_penal',default=100)
 parser.add_argument("--total_divide", type=int, help='total_divide',default=10)
 
 parser.add_argument("--lamda", type=float, help='the weight for infections',default=1) 
-parser.add_argument("--km", type=float, help='km',default=72)
+parser.add_argument("--L0", type=float, help='L0',default=72)
 parser.add_argument("--H0", type=float, help='H0',default=3)
 
 # Action noise
