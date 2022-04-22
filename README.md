@@ -4,7 +4,7 @@ Here is the released code for the DUal-objective Reinforcement-Learning Epidemic
 
 
 ## Use your own OD dataset
-Please note that we would not provide the real-world Beijing dataset due to privacy and ethical concerns. We suggest and welcome other users test DURLECA on other real-world datasets from their own resources. 
+Please note that we cannot provide public access to the real-world Beijing dataset due to privacy and ethical concerns. However, the dataset may be accessed upon request and the data provider's authorization. We also suggest and welcome other users test DURLECA on other real-world datasets from their own resources. 
 
 Please change the dataset path in the utils.py file.
 
